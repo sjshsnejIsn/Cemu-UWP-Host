@@ -3,13 +3,36 @@ on: workflow_dispatch
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: rodrigoandrigo/Cemu
+          path: Cemu
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: rodrigoandrigo/SDL3_UWP
+          path: SDL3-uwp
       - uses: microsoft/setup-msbuild@v2
-      - name: Build
+      - name: Configure Cemu
+        shell: pwsh
         run: >
-          msbuild Cemu-UWP-Host.vcxproj /restore
+          cmake -S Cemu -B Cemu/build-msvc-d3d11
+          -G "Visual Studio 18 2026" -A x64
+          -DCEMU_UWP=ON -DENABLE_D3D11=ON -DENABLE_D3D12=ON
+          -DSDL3_UWP_SOURCE_DIR="$env:GITHUB_WORKSPACE\SDL3-uwp"
+      - name: Build Cemu
+        shell: pwsh
+        run: cmake --build Cemu/build-msvc-d3d11 --config Release --target CemuBin --parallel
+      - name: Build host
+        shell: pwsh
+        run: >
+          msbuild Cemu-UWP-Host.vcxproj /restore /m
           /p:Configuration=Release /p:Platform=x64
+          /p:CemuBuildDir="$env:GITHUB_WORKSPACE\Cemu\bin"
+          /p:CemuIncludeDir="$env:GITHUB_WORKSPACE\Cemu\src"
           /p:AppxBundle=Never
           /p:UapAppxPackageBuildMode=SideloadOnly
           /p:AppxPackageSigningEnabled=true
@@ -17,6 +40,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: uwp-package
-          path: |
-            AppPackages/**
-            x64/Release/**
+          path: AppPackages/**
